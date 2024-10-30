@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { AppDataSource } from "./config/db.config";
 import { PORT_SERVER } from "./config/env.config";
 import authRoute from "./routes/authRoute";
+import chatRoute from "./routes/chatRoute";
 import cors from "cors";
 import SocketServer from "./socketServer";
 import { createServer } from "http";
@@ -17,6 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 
 //create routes
 app.use("/", authRoute);
+app.use("/chat", chatRoute);
 
 app.get("/", (req: Request, res: Response) => {
   console.log(req.body);
