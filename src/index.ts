@@ -1,8 +1,10 @@
-import express, { Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import "reflect-metadata";
 import { AppDataSource } from "./config/db.config";
 import { PORT_SERVER } from "./config/env.config";
+import authRoute from "./routes/authRoute";
 import cors from "cors";
+import SocketServer from "./socketServer";
 import { createServer } from "http";
 
 
@@ -13,6 +15,8 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+//create routes
+app.use("/", authRoute);
 
 app.get("/", (req: Request, res: Response) => {
   console.log(req.body);
@@ -23,6 +27,7 @@ function listen() {
   const httpServer = createServer(app)
   httpServer.listen(PORT)
   console.log(`Server is running on port ${PORT}`);
+  SocketServer.initialize(httpServer);
 }
 
 AppDataSource.initialize()
