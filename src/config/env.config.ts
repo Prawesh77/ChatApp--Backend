@@ -4,7 +4,7 @@ dotenv.config();
 //for server port
 export const PORT_SERVER = +process.env.PORT_SERVER!;
 
-export const JWT_SECRET = process.env.JWT_SECRET;
+export const JWT_SECRET = process.env.JWT_SECRET!;
 
 //for database
 export class dB_Env {

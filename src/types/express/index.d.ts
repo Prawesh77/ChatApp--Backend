@@ -3,8 +3,6 @@
 interface UserPayload {
     id?: number;
     role?: string;
-    firstName?: string;
-    lastName?: string;
     userName?: string;
   }
   
