@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from "typeorm";
 import { Message } from "./message.entity";
 
-@Entity()
+@Entity('auth')
 export class Auth {
   @PrimaryGeneratedColumn()
   id: number;
@@ -11,7 +11,4 @@ export class Auth {
 
   @Column()
   password: string;
-
-  @OneToMany(() => Message, (message) => message.user)
-  messages: Message[];
 }

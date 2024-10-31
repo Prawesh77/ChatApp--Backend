@@ -1,21 +1,28 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from "typeorm";
 import { Auth } from "./auth.entity";
-import { Room } from "./room.entity";
+import { Chat } from "./chat.entity";
 
-@Entity()
+@Entity('message')
 export class Message {
   @PrimaryGeneratedColumn()
   id: number;
 
+  @Column({ nullable: true })
+  message: string
+
+  @ManyToOne(() => Auth)
+  sender: Auth
+
+  @ManyToOne(() => Auth)
+  receiver: Auth
+
   @Column()
-  content: string;
-
-  @ManyToOne(() => Auth, (auth) => auth.messages)
-  user: Auth;
-
   @CreateDateColumn()
-  createdAt: Date;
+  createdAt: Date
 
-  @ManyToOne(() => Room, (room) => room.messages)
-  room: Room
+  @Column({default: false})
+  isSeen: boolean
+
+  @ManyToOne(()=>Chat, chat => chat.message)
+  chat: Chat
 }
