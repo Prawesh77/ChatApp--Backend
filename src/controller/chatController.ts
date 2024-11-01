@@ -2,12 +2,14 @@ import { Request, Response } from "express";
 import { AppDataSource } from "../config/db.config";
 import { Auth } from "../entities/auth.entity";
 import { Message } from "../entities/message.entity";
+import { Chat } from "../entities/chat.entity";
 
 class ChatController {
   
 constructor(
   private readonly authRepo = AppDataSource.getRepository(Auth),
-  private readonly messageRepo = AppDataSource.getRepository(Message)
+  private readonly messageRepo = AppDataSource.getRepository(Message),
+  private readonly chatRepo = AppDataSource.getRepository(Chat)
 ) {}
 
   async sendMessage(req: Request, res: Response) {
@@ -84,47 +86,63 @@ const sanitizedMessages = messages.map((message) => {
   }
   
 
-  async getChatListWithLastMessage(req: Request, res: Response) {
-    // const messageRepo = AppDataSource.getRepository(Message)
-    
+  async getChatListWithLastMessage(req: Request, res: Response) {    
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).json({ message: "Unauthorized" });
     }
-    console.log(userId);
+    
     try {
-      const chatList = await this.messageRepo
+      const user = await this.authRepo.findOne({ where: { id: userId } });
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      const chats = await this.chatRepo
+        .createQueryBuilder('chat')
+        .leftJoin('chat.participants', 'participant')
+        .where('participant.id = :userId', { userId })
+        .select('chat.id')
+        .getMany();
+        
+      const chatIdList = chats.map(chat => chat.id);
+      
+      if (chatIdList.length === 0) {
+        return res.status(200).json([]);
+      }
+      
+      // Step 2: Find the last message in each chat
+      const messages = await this.messageRepo
         .createQueryBuilder('message')
         .select([
-          "message.id",
-          "message.message",
-          "message.createdAt",
-          "message.isSeen",
-          "sender.id",
-          "sender.email",
-          "receiver.id",
-          "receiver.email",
-          "chat.id"
+          'message.id',
+          'message.message',
+          'message.createdAt',
+          'message.isSeen',
+          'sender.email',
+          'receiver.email',
+          'chat.id'
         ])
-        .leftJoin("message.sender", "sender")
-        .leftJoin("message.receiver", "receiver")
-        .leftJoin("message.chat", "chat")
-        .where("message.senderId = :userId OR message.receiverId = :userId", {
-          userId,
-        })
-        .orderBy("message.createdAt", "DESC")
+        .leftJoin('message.sender', 'sender')
+        .leftJoin('message.receiver', 'receiver')
+        .leftJoin('message.chat', 'chat')
+        .where('chat.id IN (:...chatIdList)', { chatIdList })
+        .orderBy('message.createdAt', 'DESC')
         .getMany();
-      console.log("chatList", chatList);
-      const chatLists = chatList.map((chat) => {
-        if (chat.sender.id === userId) {
-          return {...chat, type: 'sent'}
-        }else{
-          return {...chat, type: 'received'}
-        }
-      })
 
-      res.status(200).json(chatLists);
-
+        const lastMessages = chatIdList.map(chatId => {
+          return messages.find(message => message.chat.id === chatId);
+        });
+        console.log(lastMessages)
+        const formattedMessages = lastMessages
+          .filter(chat => chat !== undefined)
+          .map(chat => {
+            const type = chat.sender.email === user.email ? 'sent' : 'received';
+            return { ...chat, type };
+          });
+  
+      res.status(200).json(formattedMessages);
+  
     } catch (error) {
       res.status(500).json({ message: "Internal Server Error", error });
       console.log("Error on chatList", error);
