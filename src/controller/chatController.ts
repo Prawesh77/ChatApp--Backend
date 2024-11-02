@@ -64,13 +64,11 @@ class ChatController {
         receiver,
         sender,
         chat: { id: chatId },
-        isSeen: "false",
+        isSeen: false,
       };
 
-      // Save the message to the database
       await this.messageRepo.save(newMessage);
 
-      // Emit message to the specific connected user
       const recipientSocketId = socket.getSocketIdForConnectedUser(receiver.id);
       const senderSocketId = socket.getSocketIdForConnectedUser(sender.id);
       console.log(recipientSocketId);
