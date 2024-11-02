@@ -9,7 +9,7 @@ class ChatController {
   constructor(
     private readonly authRepo = AppDataSource.getRepository(Auth),
     private readonly messageRepo = AppDataSource.getRepository(Message),
-    private readonly chatRepo = AppDataSource.getRepository(Chat),
+    private readonly chatRepo = AppDataSource.getRepository(Chat)
   ) {}
 
   async sendMessage(req: Request, res: Response) {
@@ -35,14 +35,20 @@ class ChatController {
       );
 
       if (!recipient) {
-        return res.status(400).json({ message: "Receiver not found in the chat" });
+        return res
+          .status(400)
+          .json({ message: "Receiver not found in the chat" });
       }
 
       const sender = await this.authRepo.findOne({ where: { id: userId } });
-      const receiver = await this.authRepo.findOne({ where: { id: recipient.id } });
+      const receiver = await this.authRepo.findOne({
+        where: { id: recipient.id },
+      });
 
       if (!sender || !receiver) {
-        return res.status(404).json({ message: "Sender or Receiver not found" });
+        return res
+          .status(404)
+          .json({ message: "Sender or Receiver not found" });
       }
 
       const newMessage = new Message();
@@ -52,14 +58,14 @@ class ChatController {
       newMessage.createdAt = createdAt;
       newMessage.chat = chat;
 
-      const chatList ={
+      const chatList = {
         createdAt,
         message,
         receiver,
         sender,
-        chat:{id: chatId} ,
+        chat: { id: chatId },
         isSeen: "false",
-      }
+      };
 
       // Save the message to the database
       await this.messageRepo.save(newMessage);
@@ -71,8 +77,11 @@ class ChatController {
       if (recipientSocketId && senderSocketId) {
         const io = socket.get();
         io.to(recipientSocketId).emit("receive-message", newMessage);
-        io.to(recipientSocketId).emit("chat-list",{...chatList, type:"received"});
-        io.to(senderSocketId).emit("chat-list",{...chatList, type:"sent"})
+        io.to(recipientSocketId).emit("chat-list", {
+          ...chatList,
+          type: "received",
+        });
+        io.to(senderSocketId).emit("chat-list", { ...chatList, type: "sent" });
       }
 
       return res.status(200).json({ message: "Message sent successfully" });
@@ -84,7 +93,6 @@ class ChatController {
 
   async getMessages(req: Request, res: Response) {
     const chatId = parseInt(req.query.chatId as string, 10);
-    console.log(typeof chatId);
     if (isNaN(chatId)) {
       return res.status(400).json({ message: "Invalid or missing chatId" });
     }
@@ -187,6 +195,38 @@ class ChatController {
     } catch (error) {
       res.status(500).json({ message: "Internal Server Error", error });
       console.log("Error on chatList", error);
+    }
+  }
+
+  async changeSeenStatusOfMessage(req: Request, res: Response) {
+    try {
+      console.log("status");
+      const { chatId } = req.body;
+      const userId = req.user?.id;
+      if (!chatId)
+        return res.status(404).json({ message: "Insufficient request" });
+
+      const participants = await this.chatRepo.find({
+        where: { id: chatId },
+        relations: ["participants"],
+      });
+      if (!participants)
+        return res.status(404).json({ message: "No participants" });
+
+      const participantIds = participants.map((participant) => participant.id);
+      const senderId = participantIds.find((id) => id !== userId);
+
+      const message = await this.messageRepo.findOne({
+        where: { chat: { id: chatId } },
+        order: { createdAt: "DESC" },
+      });
+      console.log(message);
+      if (!message) return res.status(404).json({ message: "No messages" });
+      message.isSeen = true;
+
+      await this.messageRepo.save(message!);
+    } catch (error) {
+      console.log(error);
     }
   }
 }
