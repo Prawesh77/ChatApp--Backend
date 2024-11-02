@@ -5,7 +5,7 @@ import { PORT_SERVER } from "./config/env.config";
 import authRoute from "./routes/authRoute";
 import chatRoute from "./routes/chatRoute";
 import cors from "cors";
-import SocketServer from "./socketServer";
+import SocketServer from "./config/socketServer.config";
 import { createServer } from "http";
 
 

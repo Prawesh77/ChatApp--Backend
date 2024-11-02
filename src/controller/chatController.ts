@@ -3,17 +3,18 @@ import { AppDataSource } from "../config/db.config";
 import { Auth } from "../entities/auth.entity";
 import { Message } from "../entities/message.entity";
 import { Chat } from "../entities/chat.entity";
+import socket from "../config/socketServer.config";
 
 class ChatController {
   constructor(
     private readonly authRepo = AppDataSource.getRepository(Auth),
     private readonly messageRepo = AppDataSource.getRepository(Message),
-    private readonly chatRepo = AppDataSource.getRepository(Chat)
+    private readonly chatRepo = AppDataSource.getRepository(Chat),
   ) {}
 
   async sendMessage(req: Request, res: Response) {
     try {
-      const { chatId, message } = req.body;
+      const { chatId, createdAt, message } = req.body;
       const userId = req.user?.id;
 
       if (!userId) {
@@ -29,34 +30,50 @@ class ChatController {
         return res.status(404).json({ message: "Chat not found" });
       }
 
-      const recepient = chat.participants.find(
+      const recipient = chat.participants.find(
         (participant) => participant.id !== userId
       );
-      console.log(recepient);
-      if (!recepient) {
-        return res
-          .status(400)
-          .json({ message: "Receiver not found in the chat" });
+
+      if (!recipient) {
+        return res.status(400).json({ message: "Receiver not found in the chat" });
       }
 
       const sender = await this.authRepo.findOne({ where: { id: userId } });
-      const receiver = await this.authRepo.findOne({
-        where: { id: recepient.id },
-      });
+      const receiver = await this.authRepo.findOne({ where: { id: recipient.id } });
 
       if (!sender || !receiver) {
-        return res
-          .status(404)
-          .json({ message: "Sender or Receiver not found" });
+        return res.status(404).json({ message: "Sender or Receiver not found" });
       }
 
       const newMessage = new Message();
       newMessage.message = message;
       newMessage.sender = sender;
       newMessage.receiver = receiver;
+      newMessage.createdAt = createdAt;
       newMessage.chat = chat;
 
+      const chatList ={
+        createdAt,
+        message,
+        receiver,
+        sender,
+        chat:{id: chatId} ,
+        isSeen: "false",
+      }
+
+      // Save the message to the database
       await this.messageRepo.save(newMessage);
+
+      // Emit message to the specific connected user
+      const recipientSocketId = socket.getSocketIdForConnectedUser(receiver.id);
+      const senderSocketId = socket.getSocketIdForConnectedUser(sender.id);
+      console.log(recipientSocketId);
+      if (recipientSocketId && senderSocketId) {
+        const io = socket.get();
+        io.to(recipientSocketId).emit("receive-message", newMessage);
+        io.to(recipientSocketId).emit("chat-list",{...chatList, type:"received"});
+        io.to(senderSocketId).emit("chat-list",{...chatList, type:"sent"})
+      }
 
       return res.status(200).json({ message: "Message sent successfully" });
     } catch (err) {
@@ -139,11 +156,9 @@ class ChatController {
         return res.status(200).json([]);
       }
 
-      // Step 2: Find the last message in each chat
       const messages = await this.messageRepo
         .createQueryBuilder("message")
         .select([
-          "message.id",
           "message.message",
           "message.createdAt",
           "message.isSeen",
@@ -161,7 +176,6 @@ class ChatController {
       const lastMessages = chatIdList.map((chatId) => {
         return messages.find((message) => message.chat.id === chatId);
       });
-      console.log(lastMessages);
       const formattedMessages = lastMessages
         .filter((chat) => chat !== undefined)
         .map((chat) => {
