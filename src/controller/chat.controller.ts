@@ -1,15 +1,15 @@
 import { Request, Response } from "express";
-import { AppDataSource } from "../config/db.config";
-import { Auth } from "../entities/auth.entity";
 import { Message } from "../entities/message.entity";
-import { Chat } from "../entities/chat.entity";
 import socket from "../config/socketServer.config";
+import {ChatService} from "../services/chatRoom.services";
+import { AuthService } from "../services/auth.services";
+import { AppDataSource } from "../config/db.config";
 
 class ChatController {
   constructor(
-    private readonly authRepo = AppDataSource.getRepository(Auth),
     private readonly messageRepo = AppDataSource.getRepository(Message),
-    private readonly chatRepo = AppDataSource.getRepository(Chat)
+    private readonly chatService = new ChatService(),
+    private readonly authService = new AuthService(),
   ) {}
 
   async sendMessage(req: Request, res: Response) {
@@ -21,15 +21,8 @@ class ChatController {
         return res.status(401).json({ message: "Unauthorized" });
       }
 
-      const chat = await this.chatRepo.findOne({
-        where: { id: chatId },
-        relations: ["participants"],
-      });
-
-      if (!chat) {
-        return res.status(404).json({ message: "Chat not found" });
-      }
-
+      const chat = await this.chatService.findChatById(chatId);
+      console.log(chat);
       const recipient = chat.participants.find(
         (participant) => participant.id !== userId
       );
@@ -40,16 +33,9 @@ class ChatController {
           .json({ message: "Receiver not found in the chat" });
       }
 
-      const sender = await this.authRepo.findOne({ where: { id: userId } });
-      const receiver = await this.authRepo.findOne({
-        where: { id: recipient.id },
-      });
 
-      if (!sender || !receiver) {
-        return res
-          .status(404)
-          .json({ message: "Sender or Receiver not found" });
-      }
+      const sender = await this.authService.findAuthById(userId)
+      const receiver = await this.authService.findAuthById(recipient.id);
 
       const newMessage = new Message();
       newMessage.message = message;
@@ -144,19 +130,12 @@ class ChatController {
     }
 
     try {
-      const user = await this.authRepo.findOne({ where: { id: userId } });
+      const user = await this.authService.findAuthById(userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const chats = await this.chatRepo
-        .createQueryBuilder("chat")
-        .leftJoin("chat.participants", "participant")
-        .where("participant.id = :userId", { userId })
-        .select("chat.id")
-        .getMany();
-
-      const chatIdList = chats.map((chat) => chat.id);
+      const chatIdList = await this.chatService.getChatIdListOfUser(userId)
 
       if (chatIdList.length === 0) {
         return res.status(200).json([]);
@@ -200,29 +179,29 @@ class ChatController {
     try {
       console.log("status");
       const { chatId } = req.body;
-      const userId = req.user?.id;
+
       if (!chatId)
         return res.status(404).json({ message: "Insufficient request" });
-
-      const participants = await this.chatRepo.find({
-        where: { id: chatId },
-        relations: ["participants"],
-      });
-      if (!participants)
-        return res.status(404).json({ message: "No participants" });
-
-      const participantIds = participants.map((participant) => participant.id);
-      const senderId = participantIds.find((id) => id !== userId);
 
       const message = await this.messageRepo.findOne({
         where: { chat: { id: chatId } },
         order: { createdAt: "DESC" },
       });
-      console.log(message);
+
       if (!message) return res.status(404).json({ message: "No messages" });
       message.isSeen = true;
 
       await this.messageRepo.save(message!);
+
+      const messages = await this.messageRepo.find({
+        where: { isSeen: false ,chat: { id: chatId } },
+        order: { createdAt: "DESC" },
+      });
+
+      messages.forEach(async(message) => {
+        message.isSeen = true;
+        await this.messageRepo.save(message);
+      });
     } catch (error) {
       console.log(error);
     }
