@@ -7,7 +7,8 @@ import chatRoute from "./routes/chatRoute";
 import cors from "cors";
 import SocketServer from "./config/socketServer.config";
 import { createServer } from "http";
-
+import { errorHandler } from "./middleware/errorHandler.middleware";
+import { error } from "console";
 
 const PORT = PORT_SERVER || 4000;
 const app = express();
@@ -24,6 +25,8 @@ app.get("/", (req: Request, res: Response) => {
   console.log(req.body);
   res.send("Hello From Express");
 });
+
+app.use(errorHandler)
 
 function listen() {
   const httpServer = createServer(app)
