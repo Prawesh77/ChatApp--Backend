@@ -1,37 +1,46 @@
 import { Request, Response } from "express";
-import { AppDataSource } from "../config/db.config";
-import { Auth as User } from "../entities/auth.entity";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import {JWT_SECRET} from "../config/env.config";
+import { JWT_SECRET } from "../config/env.config";
+import { AuthService } from "../services/auth.services";
+import HttpException from "../utils/httpException.utils";
+import { Message } from "../constant/messages";
 
+export class AuthController {
+  constructor(private readonly authService = new AuthService()) {}
 
-export class AuthController{
-    register = async (req: Request, res: Response) => {
-        const { email, password } = req.body;
-        const userRepository = AppDataSource.getRepository(User);
-      
-        const existingUser = await userRepository.findOne({ where: { email } });
-        if (existingUser) return res.status(400).json({ message: "User already exists" });
-      
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const user = userRepository.create({ email, password: hashedPassword });
-        await userRepository.save(user);
-      
-        res.status(201).json({ message: "User registered" });
-      };
-      
-      login = async (req: Request, res: Response) => {
-        const { email, password } = req.body;
-        const userRepository = AppDataSource.getRepository(User);
-      
-        const user = await userRepository.findOne({ where: { email } });
-        if (!user) return res.status(400).json({ message: "Invalid credentials" });
-      
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) return res.status(400).json({ message: "Invalid credentials" });
-      
-        const token = jwt.sign({id : user.id}, JWT_SECRET!, { expiresIn: "2d" });
-        res.json({ token });
-      };   
+  register = async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+
+    await this.authService.doesUserExists(email);
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const user = await this.authService.create({
+      email,
+      password: hashedPassword,
+    });
+
+    res.status(201).json({
+      message: "User registered",
+      user: {
+        id: user.id,
+        email: user.email,
+      },
+    });
+  };
+
+  login = async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+
+    const user = await this.authService.findUserByEmail(email);
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid)
+      throw HttpException.notFound(Message.invalidCredentials);
+
+    const token = jwt.sign({ id: user.id }, JWT_SECRET!, { expiresIn: "2d" });
+
+    res.json({ token });
+  };
 }
