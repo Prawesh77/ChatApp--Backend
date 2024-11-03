@@ -9,7 +9,7 @@ import { Auth } from "./auth.entity";
 import { Message } from "./message.entity";
 
 @Entity("chat")
-export class Chat {
+export class ChatRoom {
   @PrimaryGeneratedColumn()
   id: number;
 
