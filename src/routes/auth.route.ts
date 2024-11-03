@@ -1,5 +1,5 @@
 import express from "express";
-import { AuthController } from "../controller/authController";
+import { AuthController } from "../controller/auth.controller";
 import { catchAsync } from "../utils/catchAsync.utils";
 
 const router = express.Router();

@@ -2,13 +2,12 @@ import express, { NextFunction, Request, Response } from "express";
 import "reflect-metadata";
 import { AppDataSource } from "./config/db.config";
 import { PORT_SERVER } from "./config/env.config";
-import authRoute from "./routes/authRoute";
-import chatRoute from "./routes/chatRoute";
+import authRoute from "./routes/auth.route";
+import chatRoute from "./routes/chat.route";
 import cors from "cors";
 import SocketServer from "./config/socketServer.config";
 import { createServer } from "http";
 import { errorHandler } from "./middleware/errorHandler.middleware";
-import { error } from "console";
 
 const PORT = PORT_SERVER || 4000;
 const app = express();
