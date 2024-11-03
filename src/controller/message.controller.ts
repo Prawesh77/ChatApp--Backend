@@ -1,15 +1,17 @@
 import { Request, Response } from "express";
 import { Message } from "../entities/message.entity";
 import socket from "../config/socketServer.config";
-import {ChatService} from "../services/chatRoom.services";
+import { ChatService } from "../services/chatRoom.services";
 import { AuthService } from "../services/auth.services";
+import { MessageService } from "../services/message.services";
 import { AppDataSource } from "../config/db.config";
 
 class MessageController {
   constructor(
     private readonly messageRepo = AppDataSource.getRepository(Message),
+    private readonly messageService = new MessageService(),
     private readonly chatService = new ChatService(),
-    private readonly authService = new AuthService(),
+    private readonly authService = new AuthService()
   ) {}
 
   async sendMessage(req: Request, res: Response) {
@@ -33,27 +35,16 @@ class MessageController {
           .json({ message: "Receiver not found in the chat" });
       }
 
-
-      const sender = await this.authService.findAuthById(userId)
+      const sender = await this.authService.findAuthById(userId);
       const receiver = await this.authService.findAuthById(recipient.id);
 
-      const newMessage = new Message();
-      newMessage.message = message;
-      newMessage.sender = sender;
-      newMessage.receiver = receiver;
-      newMessage.createdAt = createdAt;
-      newMessage.chat = chat;
-
-      const chatList = {
-        createdAt,
+      const newMessage = await this.messageService.create({
         message,
-        receiver,
         sender,
-        chat: { id: chatId },
-        isSeen: false,
-      };
-
-      await this.messageRepo.save(newMessage);
+        receiver,
+        createdAt,
+        chat,
+      });
 
       const recipientSocketId = socket.getSocketIdForConnectedUser(receiver.id);
       const senderSocketId = socket.getSocketIdForConnectedUser(sender.id);
@@ -62,10 +53,13 @@ class MessageController {
         const io = socket.get();
         io.to(recipientSocketId).emit("receive-message", newMessage);
         io.to(recipientSocketId).emit("chat-list", {
-          ...chatList,
+          ...newMessage,
           type: "received",
         });
-        io.to(senderSocketId).emit("chat-list", { ...chatList, type: "sent" });
+        io.to(senderSocketId).emit("chat-list", {
+          ...newMessage,
+          type: "sent",
+        });
       }
 
       return res.status(200).json({ message: "Message sent successfully" });
@@ -82,17 +76,9 @@ class MessageController {
     }
 
     try {
-      const allMessages = await this.messageRepo.find({
-        where: { chat: { id: chatId } },
-        relations: ["sender", "receiver"],
-        order: { createdAt: "ASC" },
-      });
-
-      if (allMessages.length === 0) {
-        return res
-          .status(404)
-          .json({ message: "No messages found for this chat" });
-      }
+      const allMessages = await this.messageService.findAllMessageOfChatId(
+        chatId
+      );
 
       const messages = allMessages.map((message) => {
         if (message.sender.id === req.user?.id) {
@@ -102,7 +88,7 @@ class MessageController {
         }
       });
 
-      const sanitizedMessages = messages.map((message) => {
+      const responseMessage = messages.map((message) => {
         return {
           id: message.id,
           message: message.message,
@@ -114,7 +100,7 @@ class MessageController {
         };
       });
 
-      return res.status(200).json(sanitizedMessages);
+      return res.status(200).json(responseMessage);
     } catch (error) {
       console.error("Error retrieving messages:", error);
       return res
@@ -135,33 +121,14 @@ class MessageController {
         return res.status(404).json({ message: "User not found" });
       }
 
-      const chatIdList = await this.chatService.getChatIdListOfUser(userId)
+      const chatIdList = await this.chatService.getChatIdListOfUser(userId);
 
       if (chatIdList.length === 0) {
         return res.status(200).json([]);
       }
 
-      const messages = await this.messageRepo
-        .createQueryBuilder("message")
-        .select([
-          "message.message",
-          "message.createdAt",
-          "message.isSeen",
-          "sender.email",
-          "receiver.email",
-          "chat.id",
-        ])
-        .leftJoin("message.sender", "sender")
-        .leftJoin("message.receiver", "receiver")
-        .leftJoin("message.chat", "chat")
-        .where("chat.id IN (:...chatIdList)", { chatIdList })
-        .orderBy("message.createdAt", "DESC")
-        .getMany();
-
-      const lastMessages = chatIdList.map((chatId) => {
-        return messages.find((message) => message.chat.id === chatId);
-      });
-      const formattedMessages = lastMessages
+      const chatListWithLastMessage = await this.messageService.getChatListWithLastMessage(chatIdList);
+      const formattedMessages = chatListWithLastMessage
         .filter((chat) => chat !== undefined)
         .map((chat) => {
           const type = chat.sender.email === user.email ? "sent" : "received";
@@ -183,22 +150,12 @@ class MessageController {
       if (!chatId)
         return res.status(404).json({ message: "Insufficient request" });
 
-      const message = await this.messageRepo.findOne({
-        where: { chat: { id: chatId } },
-        order: { createdAt: "DESC" },
-      });
-
-      if (!message) return res.status(404).json({ message: "No messages" });
+      const message = await this.messageService.getLastMessageOfChatId(chatId)
       message.isSeen = true;
+      await this.messageService.update(message);
 
-      await this.messageRepo.save(message!);
-
-      const messages = await this.messageRepo.find({
-        where: { isSeen: false ,chat: { id: chatId } },
-        order: { createdAt: "DESC" },
-      });
-
-      messages.forEach(async(message) => {
+      const messages = await this.messageService.getAllUnseenMessagesOfChatId(chatId);
+      messages.forEach(async (message) => {
         message.isSeen = true;
         await this.messageRepo.save(message);
       });
