@@ -5,7 +5,7 @@ import {ChatService} from "../services/chatRoom.services";
 import { AuthService } from "../services/auth.services";
 import { AppDataSource } from "../config/db.config";
 
-class ChatController {
+class MessageController {
   constructor(
     private readonly messageRepo = AppDataSource.getRepository(Message),
     private readonly chatService = new ChatService(),
@@ -208,4 +208,4 @@ class ChatController {
   }
 }
 
-export default new ChatController();
+export default new MessageController();

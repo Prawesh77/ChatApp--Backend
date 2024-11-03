@@ -1,12 +1,12 @@
 import express from "express";
-import  chatController  from "../controller/chat.controller";
+import  messageController  from "../controller/message.controller";
 import authentication from "../middleware/authentication.middleware";
 
 const router = express.Router();
 
-router.post("/send-message", authentication, chatController.sendMessage.bind(chatController));
-router.get("/get-message", authentication, chatController.getMessages.bind(chatController));
-router.get("/get-chat-list", authentication, chatController.getChatListWithLastMessage.bind(chatController));
-router.patch("/seen-status", authentication, chatController.changeSeenStatusOfMessage.bind(chatController));
+router.post("/send-message", authentication, messageController.sendMessage.bind(messageController));
+router.get("/get-message", authentication, messageController.getMessages.bind(messageController));
+router.get("/get-chat-list", authentication, messageController.getChatListWithLastMessage.bind(messageController));
+router.patch("/seen-status", authentication, messageController.changeSeenStatusOfMessage.bind(messageController));
 
 export default router;
